@@ -5,6 +5,7 @@ export class PDFService {
   static async extractTextFromPDF(filePath: string): Promise<string> {
     try {
       // Dynamic import to avoid initialization issues with pdf-parse
+      // @ts-ignore - pdf-parse doesn't have proper types
       const pdfParse = (await import('pdf-parse')).default;
       const dataBuffer = fs.readFileSync(filePath);
       const data = await pdfParse(dataBuffer);
