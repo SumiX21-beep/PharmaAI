@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-// @ts-ignore - pdf-parse doesn't have proper types
-import pdfParse from 'pdf-parse';
 
 export class PDFService {
   static async extractTextFromPDF(filePath: string): Promise<string> {
     try {
+      // Dynamic import to avoid initialization issues with pdf-parse
+      const pdfParse = (await import('pdf-parse')).default;
       const dataBuffer = fs.readFileSync(filePath);
       const data = await pdfParse(dataBuffer);
       return data.text;

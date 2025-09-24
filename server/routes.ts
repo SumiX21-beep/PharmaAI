@@ -7,11 +7,14 @@ import { EmbeddingService } from "./services/embeddingService";
 import { VectorService } from "./services/vectorService";
 import { insertDocumentSchema, insertQuerySchema } from "@shared/schema";
 import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 import path from "path";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "",
 });
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 // Configure multer for file uploads
 const upload = multer({
@@ -116,7 +119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map((result, index) => `[Source ${index + 1} - ${result.documentName}]: ${result.chunk.text}`)
         .join("\n\n");
 
-      // Generate response using OpenAI
+      // Generate response using Gemini
       const prompt = `You are PharmaQuery, an AI research assistant specializing in pharmaceutical research. Use the provided context from research papers to answer the question accurately and concisely.
 
 Context from uploaded research papers:
@@ -133,19 +136,13 @@ Instructions:
 
 Answer:`;
 
-      // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-      const completion = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        max_completion_tokens: 800,
+      // Use Gemini 2.5 Flash for text generation
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
       });
 
-      const answer = completion.choices[0].message.content || "I'm sorry, I couldn't generate a response.";
+      const answer = response.text || "I'm sorry, I couldn't generate a response.";
 
       // Format sources for frontend
       const sources = similarChunks.map((result) => ({
