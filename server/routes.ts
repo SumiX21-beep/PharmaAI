@@ -10,11 +10,13 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import path from "path";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "",
-});
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const openai = OPENAI_API_KEY ? new OpenAI({
+  apiKey: OPENAI_API_KEY,
+}) : null;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 // Configure multer for file uploads
 const upload = multer({
@@ -95,7 +97,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Query endpoint
   app.post("/api/query", async (req, res) => {
     try {
-      const { query } = insertQuerySchema.parse(req.body);
+      const { query } = req.body as { query?: string };
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: "Query is required" });
+      }
 
       if (!query || query.trim().length === 0) {
         return res.status(400).json({ error: "Query is required" });
@@ -119,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map((result, index) => `[Source ${index + 1} - ${result.documentName}]: ${result.chunk.text}`)
         .join("\n\n");
 
-      // Generate response using Gemini
+      // Generate response using Gemini/OpenAI or fallback
       const prompt = `You are PharmaQuery, an AI research assistant specializing in pharmaceutical research. Use the provided context from research papers to answer the question accurately and concisely.
 
 Context from uploaded research papers:
@@ -136,13 +141,32 @@ Instructions:
 
 Answer:`;
 
-      // Use Gemini 2.5 Flash for text generation
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-      });
+      let answer: string | undefined;
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+        });
+        // @ts-ignore - SDK typing differences
+        answer = response.text;
+      } else if (openai) {
+        const chat = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+        });
+        answer = chat.choices?.[0]?.message?.content;
+      } else {
+        // Simple extractive fallback: return top chunk texts as a summary
+        const joined = similarChunks
+          .map((r, i) => `Source ${i + 1} (${r.documentName}): ${r.chunk.text}`)
+          .join("\n\n");
+        answer = joined.slice(0, 1200) + (joined.length > 1200 ? "..." : "");
+      }
 
-      const answer = response.text || "I'm sorry, I couldn't generate a response.";
+      if (!answer) {
+        answer = "I'm sorry, I couldn't generate a response.";
+      }
 
       // Format sources for frontend
       const sources = similarChunks.map((result) => ({
