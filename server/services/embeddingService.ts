@@ -1,9 +1,6 @@
 import OpenAI from "openai";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "";
-const openai = OPENAI_API_KEY ? new OpenAI({
-  apiKey: OPENAI_API_KEY,
-}) : null;
 
 export class EmbeddingService {
   static async generateEmbedding(text: string): Promise<number[]> {
